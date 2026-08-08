@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 from gradcam import GradCAM
 import streamlit as st
 from torchvision import models, transforms
-from PIL import Image
-import cv2
+from PIL 
+import Image
 import json
 import google.generativeai as genai
 import os 
