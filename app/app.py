@@ -9,31 +9,61 @@ import torch
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
+from gradcam import GradCAM
 import streamlit as st
 from torchvision import models, transforms
 from PIL import Image
 import cv2
 import json
-# Allow importing gradcam.py from the same folder
-sys.path.append(os.path.dirname(__file__))
-from gradcam import GradCAM
+import google.generativeai as genai
+import os 
+from dotenv import load_dotenv
+load_dotenv() 
+api_key = os.getenv("GOOGLE_API_KEY")
+genai.configure(api_key=api_key)
+
 
 # ─── Config ────────────────────────────────────────────────────────────────────
 MODEL_PATH   = os.path.join(os.path.dirname(__file__), "model", "breast_cancer_model.pth")
 CLASS_NAMES  = ["Non-Cancerous (IDC Negative)", "Cancerous (IDC Positive)"]
-IMG_SIZE  = 50
+IMG_SIZE     = 50
 DISPLAY_SIZE = 224          # resize for display / Grad-CAM overlay
 DEVICE       = torch.device("cpu")
 # ───────────────────────────────────────────────────────────────────────────────
+
+
 @st.cache_data
 def load_metrics():
     metrics_path = os.path.join(os.path.dirname(__file__), "model", "metrics.json")
     if os.path.exists(metrics_path):
         with open(metrics_path, "r") as f:
             return json.load(f)
-        return None
+    return None
 
-@st.cache_resource(show_spinner="Loading model...")
+
+def get_ai_explanation(pred_label, confidence, class_probs):
+    try:
+        model = genai.GenerativeModel("gemini-3.5-flash")
+        prompt = f"""
+        You are an expert in histopathology and breast cancer detection.
+        A model has predicted that a histopathology image is **{pred_label}** with a confidence of {confidence:.1f}%.
+        The class probabilities are:
+        - Non-Cancerous: {class_probs[0]*100:.1f}%
+        - Cancerous: {class_probs[1]*100:.1f}%
+    
+    Write your response as a single, well-structured flowing paragraph (do NOT use bullet points, numbered lists, or headers). Explain what this prediction means, the implications for the patient, and any relevant caution - in plain English, under 250 words.
+        """
+
+        response = model.generate_content(
+            prompt,
+            generation_config={"temperature": 0.7, "max_output_tokens": 500}
+        )
+        return response.text
+    except Exception as e:
+        return f"AI explanation unavailable right now. ({e})"
+
+
+@st.cache_resource
 def load_model():
     model = models.resnet18(weights=None)
     model.fc = nn.Linear(model.fc.in_features, 2)
@@ -46,9 +76,8 @@ def preprocess(image: Image.Image) -> torch.Tensor:
     transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
-        
         transforms.Normalize([0.485, 0.456, 0.406],
-                             [0.229, 0.224, 0.225]),
+                              [0.229, 0.224, 0.225]),
     ])
     return transform(image).unsqueeze(0).to(DEVICE)
 
@@ -134,12 +163,12 @@ def main():
                 cam, class_idx, probs = gradcam.generate(input_tensor)
 
                 # Prepare display image
-                display_img =  np.array(image.resize((DISPLAY_SIZE, DISPLAY_SIZE)))
-                
+                display_img = np.array(image.resize((DISPLAY_SIZE, DISPLAY_SIZE)))
+
                 cam_resized = cv2.resize(cam, (display_img.shape[1], display_img.shape[0]))
                 overlay = gradcam.overlay_on_image(cam_resized, display_img)
                 heatmap = cam_resized
-                 
+
             # ── Prediction ──────────────────────────────────────────────────
             st.subheader("Prediction Result")
 
@@ -170,17 +199,43 @@ def main():
                 "Blue/cool regions = low influence"
             )
             show_gradcam_figure(display_img, overlay, heatmap)
-            
+
             st.markdown("---")
+
+            # ── AI Explanation ──────────────────────────────────────────────
+            st.subheader("AI-Generated Explanation")
+            with st.spinner("Generating explanation..."):
+                explanation = get_ai_explanation(pred_label, confidence, probs)
+            
+            st.markdown(f"""
+    <div style='
+        background-color:#1a1c24;
+        border-left:4px solid #4a90d9;
+        border-radius:8px;
+        padding:20px 24px;
+        line-height:1.7;
+        color:#dddddd;
+        font-size:15px;
+        text-align:justify;
+        margin-top:8px;
+    '>
+        {explanation}
+    </div>
+""", unsafe_allow_html=True)
+
+            # ── Metrics ──────────────────────────────────────────────────────
             st.subheader("Model Performance")
-            metrics =load_metrics()
+            metrics = load_metrics()
             if metrics:
-                m1, m2, m3  , m4= st.columns(4)
-                
-     
-    else:
-        with col_result:
-            st.markdown("""
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Accuracy", f"{metrics.get('accuracy', 0):.1f}%")
+                m2.metric("Precision", f"{metrics.get('precision', 0):.1f}%")
+                m3.metric("Recall", f"{metrics.get('recall', 0):.1f}%")
+                m4.metric("F1_Score", f"{metrics.get('f1', 0):.1f}%")
+
+            else:
+             with col_result:
+                   st.markdown("""
                 <div style='
                     display:flex; flex-direction:column;
                     align-items:center; justify-content:center;

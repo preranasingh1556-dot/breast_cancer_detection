@@ -1,1 +1,17 @@
+# Environment variables (contains API keys)
 .env
+
+# Virtual environments
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Dataset (too large for GitHub)
+data/
+IDC_regular_ps50_idx5/
+
+# OS/editor files
+.DS_Store
+.vscode/

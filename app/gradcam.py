@@ -9,6 +9,7 @@ Usage:
     heatmap, pred_class = cam_engine.generate(input_tensor)
 """
 
+import matplotlib
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -113,12 +114,10 @@ class GradCAM:
         Returns:
             numpy array (H, W, 3), uint8, ready for display
         """
-        import matplotlib.cm as cm
-
         if original_image.dtype != np.uint8:
             original_image = np.uint8(255 * original_image / original_image.max())
 
-        cmap = cm.get_cmap(colormap)
+        cmap = matplotlib.colormaps[colormap]
         colored_heatmap = cmap(heatmap)[:, :, :3]  # drop alpha channel
         colored_heatmap = np.uint8(255 * colored_heatmap)
 
