@@ -122,7 +122,7 @@ Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apike
 ```powershell
 streamlit run app.py
 ```
-Open the URL shown in the terminal (typically `http://localhost:8501`).
+Open the URL shown in the terminal (typically `http://localhost:8503`).
 
 ---
 
